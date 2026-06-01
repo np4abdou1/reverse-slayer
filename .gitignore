@@ -1,0 +1,21 @@
+# Local tooling
+/.opencode/
+
+# Decompiler trees are retained in the compressed artifact.
+/apktool_out/
+/jadx_out/
+/anslayer.apk
+/stream-server-backend-presenters.zipline
+/JsUnpacker-js-ir.zipline
+
+# Node and Next.js generated files
+**/node_modules/
+**/.next/
+**/*.tsbuildinfo
+**/next-env.d.ts
+
+# Local environment and logs
+**/.env*
+*.log
+*.tmp
+.DS_Store
