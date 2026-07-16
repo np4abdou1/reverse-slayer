@@ -1,47 +1,49 @@
-import { searchAnime } from "@/lib/anslayer";
-import AnimeCard from "@/components/AnimeCard";
+import { searchAnime } from '@/lib/anslayer';
+import AnimeGrid from '@/components/AnimeGrid';
+import Pagination from '@/components/Pagination';
 
-export const dynamic = 'force-dynamic';
-
-export default async function Search({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+export default async function SearchPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
   const sp = await searchParams;
+  const page = Number(sp.page) || 1;
+  const limit = 48;
+  const offset = (page - 1) * limit;
+
   const query = sp.q || '';
-  const animeList = query ? await searchAnime(query) : [];
+  const { data: results, total } = query ? await searchAnime(query, limit, offset).catch(() => ({ data: [], total: 0 })) : { data: [], total: 0 };
+  const totalPages = Math.ceil(total / limit);
+
+  if (!query) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 text-center gap-4 animate-fade-in">
+        <p className="text-muted font-bold text-sm">استخدم زر البحث في الأعلى للبحث عن أنمي</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-fade-in">
-      <div className="container" style={{ padding: '24px 24px 60px' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '8px', color: '#000' }}>
-          {query ? `Results for "${query}"` : 'Search Anime'}
-        </h1>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontWeight: '600', fontSize: '13px' }}>
-          {animeList.length} results found.
+    <div className="flex flex-col gap-8 animate-fade-in">
+      <div className="flex items-center justify-between border-b border-border pb-4">
+        <p className="text-sm text-muted">
+          نتائج البحث عن: <span className="text-foreground font-bold">&quot;{query}&quot;</span>
         </p>
-        <form action="/search" className="search-page-form">
-          <input name="q" defaultValue={query} placeholder="Search by anime title" aria-label="Search by anime title" />
-          <button type="submit">Search</button>
-        </form>
-
-        {animeList.length > 0 ? (
-          <div className="anime-grid">
-            {animeList.map((anime: any) => (
-              <AnimeCard
-                key={anime.anime_id}
-                id={anime.anime_id}
-                name={anime.anime_name}
-                image={anime.anime_cover_image_url}
-                rating={anime.anime_rating}
-                type={anime.anime_type}
-                year={anime.anime_release_year}
-              />
-            ))}
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '80px 0' }}>
-            <h2 style={{ color: 'var(--text-muted)', fontWeight: '600', fontSize: '16px' }}>No results found. Try a different search.</h2>
-          </div>
-        )}
+        <span className="text-xs text-muted font-bold">{total} نتيجة</span>
       </div>
+      {results.length > 0 ? (
+        <>
+          <AnimeGrid animes={results} />
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            hasNextPage={page < totalPages}
+            basePath="/search"
+            queryString={`&q=${query}`}
+          />
+        </>
+      ) : (
+        <div className="border border-border bg-card p-16 text-center text-muted font-bold text-base">
+          لا توجد نتائج مطابقة لـ &quot;{query}&quot;
+        </div>
+      )}
     </div>
   );
 }

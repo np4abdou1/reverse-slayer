@@ -1,0 +1,13 @@
+[Unit]
+Description=Anime daily sync job
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Projects/reverse-slayer/anime-next
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -u /home/ubuntu/Projects/reverse-slayer/anime-next/scripts/daily_sync.py
+StandardOutput=append:/tmp/anime_sync_cron.log
+StandardError=append:/tmp/anime_sync_cron.log

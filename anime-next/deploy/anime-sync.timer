@@ -1,0 +1,11 @@
+[Unit]
+Description=Run anime sync daily at 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+AccuracySec=1m
+Unit=anime-sync.service
+
+[Install]
+WantedBy=timers.target

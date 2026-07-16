@@ -1,75 +1,70 @@
-import { searchAnime } from "@/lib/anslayer";
-import AnimeCard from "@/components/AnimeCard";
-import Link from "next/link";
+import { getAnimeList } from '@/lib/anslayer';
+import AnimeGrid from '@/components/AnimeGrid';
+import EpisodeCard from '@/components/EpisodeCard';
+import Link from 'next/link';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ type?: string, page?: string }> }) {
-  const sp = await searchParams;
-  const type = sp.type || 'latest_episodes';
-  const currentPage = Number(sp.page) || 1;
-  const offset = (currentPage - 1) * 24;
-  
-  const animeList = await searchAnime('', type, 24, offset);
-
-  const categories = [
-    { id: 'latest_episodes', name: 'Latest' },
-    { id: 'currently_airing', name: 'Trending' },
-    { id: 'top_anime', name: 'Top Rated' },
-    { id: 'top_tv', name: 'TV Series' },
-    { id: 'top_movie', name: 'Movies' },
-  ];
+export default async function Home() {
+  const [latestEpisodes, seasonPopular, topRated] = await Promise.all([
+    getAnimeList('latest_updated_episode_new', 12, 0).catch(() => ({ data: [], total: 0 })),
+    getAnimeList('top_currently_airing', 24, 0).catch(() => ({ data: [], total: 0 })),
+    getAnimeList('top_anime_mal', 12, 0).catch(() => ({ data: [], total: 0 })),
+  ]);
 
   return (
-    <div className="animate-fade-in">
-      <div className="container" style={{ padding: '24px 24px 60px' }}>
-        <section>
-          <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#000' }}>
-              Browse
-            </h1>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {categories.map((cat) => (
-                <Link
-                  key={cat.id}
-                  href={`/?type=${cat.id}`}
-                  style={{
-                    padding: '6px 14px', borderRadius: '8px',
-                    backgroundColor: type === cat.id ? '#000' : '#f5f5f7',
-                    color: type === cat.id ? '#fff' : '#444',
-                    fontSize: '12px', fontWeight: '700',
-                    transition: 'all 0.2s', border: '1px solid var(--border)'
-                  }}
-                >
-                  {cat.name}
-                </Link>
-              ))}
-            </div>
-          </div>
+    <div className="flex flex-col gap-8 animate-fade-in">
+      <section>
+        <div className="flex items-end justify-between mb-8 pb-4 border-b border-border">
+          <h2 className="text-2xl md:text-3xl font-black tracking-tight text-foreground flex items-center gap-3">
+            <span className="w-1.5 h-8 bg-foreground"></span>
+            أحدث الحلقات
+          </h2>
+          <Link
+            href="/latest"
+            className="text-xs font-bold text-muted hover:text-foreground border border-border hover:border-border-hover px-5 py-2.5 transition-all uppercase tracking-widest"
+          >
+            عرض الكل
+          </Link>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+          {latestEpisodes.data.slice(0, 10).map((anime: any) => (
+            <EpisodeCard key={anime.anime_id} anime={anime} />
+          ))}
+        </div>
+      </section>
 
-          <div className="anime-grid">
-            {animeList.map((anime: any) => (
-              <AnimeCard
-                key={anime.anime_id}
-                id={anime.anime_id}
-                name={anime.anime_name}
-                image={anime.anime_cover_image_url}
-                rating={anime.anime_rating}
-                type={anime.anime_type}
-                year={anime.anime_release_year}
-              />
-            ))}
-          </div>
+      <section>
+        <div className="flex items-end justify-between mb-8 pb-4 border-b border-border">
+          <h2 className="text-2xl md:text-3xl font-black tracking-tight text-foreground flex items-center gap-3">
+            <span className="w-1.5 h-8 bg-muted"></span>
+            الأكثر مشاهدة
+          </h2>
+          <Link
+            href="/top/top_currently_airing"
+            className="text-xs font-bold text-muted hover:text-foreground border border-border hover:border-border-hover px-5 py-2.5 transition-all uppercase tracking-widest"
+          >
+            عرض الكل
+          </Link>
+        </div>
+        <AnimeGrid animes={seasonPopular.data} limitRows={2} maxCols={5} />
+      </section>
 
-          <div className="pagination">
-             {currentPage > 1 && (
-               <Link href={`/?type=${type}&page=${currentPage - 1}`} className="page-btn">Previous</Link>
-             )}
-             <span className="page-btn active">{currentPage}</span>
-             <Link href={`/?type=${type}&page=${currentPage + 1}`} className="page-btn">Next</Link>
-          </div>
-        </section>
-      </div>
+      <section>
+        <div className="flex items-end justify-between mb-8 pb-4 border-b border-border">
+          <h2 className="text-2xl md:text-3xl font-black tracking-tight text-foreground flex items-center gap-3">
+            <span className="w-1.5 h-8 bg-muted/60"></span>
+            أعلى التقييمات
+          </h2>
+          <Link
+            href="/top/top_anime_mal"
+            className="text-xs font-bold text-muted hover:text-foreground border border-border hover:border-border-hover px-5 py-2.5 transition-all uppercase tracking-widest"
+          >
+            عرض الكل
+          </Link>
+        </div>
+        <AnimeGrid animes={topRated.data} limitRows={2} maxCols={5} />
+      </section>
     </div>
   );
 }

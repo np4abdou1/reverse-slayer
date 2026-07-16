@@ -5,9 +5,11 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/Projects/anime/anime-next
+WorkingDirectory=/home/ubuntu/Projects/reverse-slayer/anime-next
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/npm run start
+Environment=PORT=8080
+Environment=SITE_URL=http://51.170.140.187:8080
+ExecStart=/bin/bash /home/ubuntu/Projects/reverse-slayer/anime-next/start.sh
 Restart=always
 RestartSec=3
 

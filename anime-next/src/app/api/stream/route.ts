@@ -1,70 +1,93 @@
-import { NextRequest } from 'next/server';
+import { createStreamProxyHandler, buildProxyUrl } from 'aetherly-stream-proxy';
 
-const FORWARDED_HEADERS = [
-  'accept-ranges',
-  'cache-control',
-  'content-length',
-  'content-range',
-  'content-type',
-] as const;
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-function isAllowedHost(host: string) {
-  return host === 'mediafire.com'
-    || host.endsWith('.mediafire.com')
-    || host === 'streamtape.to'
-    || host.endsWith('.streamtape.to')
-    || host === 'tapecontent.net'
-    || host.endsWith('.tapecontent.net')
-    || host === 'ab-hunter.com'
-    || host.endsWith('.ab-hunter.com');
+const proxy = createStreamProxyHandler({
+  pathPrefix: '/api/stream',
+  allowedHeaderPrefixes: ['referer', 'origin', 'user-agent', 'cookie', 'range', 'x-'],
+  defaultUserAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/132.0.0.0 Safari/537.36',
+});
+
+export const HEAD = proxy.HEAD;
+export const OPTIONS = proxy.OPTIONS;
+
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/132.0.0.0 Safari/537.36';
+
+function normalizeMfUrl(mfPage: string): string {
+  if (!mfPage.includes('/file/') && !mfPage.includes('/download/')) {
+    try {
+      const u = new URL(mfPage);
+      for (const [key, val] of u.searchParams.entries()) {
+        if (!val && /^[a-z0-9]{10,}$/i.test(key)) {
+          return `https://www.mediafire.com/file/${key}`;
+        }
+      }
+      const raw = mfPage.split('?')[1] || '';
+      const bare = raw.split('&')[0].split('=')[0];
+      if (/^[a-z0-9]{10,}$/i.test(bare) && !mfPage.includes('/file/')) {
+        return `https://www.mediafire.com/file/${bare}`;
+      }
+    } catch {}
+  }
+  return mfPage.replace(/^http:\/\//i, 'https://');
 }
 
-export async function GET(request: NextRequest) {
-  const target = request.nextUrl.searchParams.get('url');
-  if (!target) return new Response('Missing stream URL', { status: 400 });
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const mfPage = url.searchParams.get('mfPage');
+  const videoUrl = url.searchParams.get('url');
+  const cookies = url.searchParams.get('cookies');
 
-  let url: URL;
-  try {
-    url = new URL(target);
-  } catch {
-    return new Response('Invalid stream URL', { status: 400 });
+  if (mfPage) {
+    try {
+      const normalized = normalizeMfUrl(mfPage);
+      const res = await fetch(normalized, {
+        headers: { 'User-Agent': UA, 'Accept': 'text/html', 'Referer': 'https://anslayer.com/' },
+        signal: AbortSignal.timeout(15000),
+      });
+      const html = await res.text();
+      if (html.includes('Just a moment') || html.includes('challenge-platform') || html.includes('cf_chl_opt')) {
+        return new Response('MediaFire is behind Cloudflare challenge', { status: 502 });
+      }
+      const m = html.match(/(https?:\/\/download[^"]+)/);
+      if (!m) return new Response('Could not extract MediaFire download URL', { status: 502 });
+      const targetUrl = m[1].replace(/&amp;/g, '&');
+      const setCookies = (res.headers as any).getSetCookie?.() || [];
+      const cookieStr = setCookies.map((c: string) => c.split(';')[0]).join('; ');
+
+      const proxyUrl = buildProxyUrl(targetUrl, {
+        'Cookie': cookieStr,
+        'Referer': 'https://www.mediafire.com/',
+        'User-Agent': UA,
+      });
+      const proxyReq = new Request(new URL(proxyUrl, request.url).toString(), {
+        headers: request.headers,
+      });
+      return await proxy.GET(proxyReq);
+    } catch (e: any) {
+      return new Response('MediaFire proxy failed: ' + e.message, { status: 502 });
+    }
   }
 
-  if (!['http:', 'https:'].includes(url.protocol) || !isAllowedHost(url.hostname.toLowerCase())) {
-    return new Response('Unsupported stream host', { status: 403 });
-  }
-
-  let upstream: Response;
-  try {
-    upstream = await fetchAllowed(url, request);
-  } catch {
-    return new Response('Stream upstream failed', { status: 502 });
-  }
-
-  const headers = new Headers();
-  for (const name of FORWARDED_HEADERS) {
-    const value = upstream.headers.get(name);
-    if (value) headers.set(name, value);
-  }
-  headers.set('Access-Control-Allow-Origin', '*');
-
-  return new Response(upstream.body, { status: upstream.status, headers });
-}
-
-async function fetchAllowed(initialUrl: URL, request: NextRequest) {
-  let url = initialUrl;
-  for (let redirects = 0; redirects <= 4; redirects++) {
-    if (!isAllowedHost(url.hostname.toLowerCase())) throw new Error('Unsupported redirect host');
-    const response = await fetch(url, {
-      redirect: 'manual',
-      headers: {
-        'User-Agent': request.headers.get('user-agent') || 'Mozilla/5.0',
-        ...(request.headers.get('range') ? { Range: request.headers.get('range')! } : {}),
-      },
+  if (videoUrl && cookies) {
+    const proxyUrl = buildProxyUrl(videoUrl, {
+      'Cookie': cookies,
+      'Referer': 'https://www.mediafire.com/',
     });
-    const location = response.headers.get('location');
-    if (!location || response.status < 300 || response.status >= 400) return response;
-    url = new URL(location, url);
+    const proxyReq = new Request(new URL(proxyUrl, request.url).toString(), {
+      headers: request.headers,
+    });
+    return await proxy.GET(proxyReq);
   }
-  throw new Error('Too many redirects');
+
+  if (videoUrl) {
+    const proxyUrl = buildProxyUrl(videoUrl);
+    const proxyReq = new Request(new URL(proxyUrl, request.url).toString(), {
+      headers: request.headers,
+    });
+    return await proxy.GET(proxyReq);
+  }
+
+  return new Response('Missing stream URL', { status: 400 });
 }
